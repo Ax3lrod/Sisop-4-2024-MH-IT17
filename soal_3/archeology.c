@@ -7,7 +7,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/types.h>
-#include <unistd.h>  // Tambahkan ini untuk close() dan pread()
+#include <unistd.h>  
 
 static const char *base_path = "relics";
 
