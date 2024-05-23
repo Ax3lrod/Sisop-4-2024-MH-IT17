@@ -588,7 +588,12 @@ Setelah ini, user dapat menggunakan terminal 2 untuk pindah ke folder mount (dal
 
 ![image](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/150204139/f147431a-8024-497d-af6d-de925bf755d4)
 
+Kemudian, jika user ingin melakukan operasi apapun pada folder rahasia-berkas, FUSE akan menanyakan password di terminal 1.
 
+![image](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/150204139/249f562a-64cc-48ad-aaca-1fe10b1910d8)
 
+Semua operasi dan proses yang terjadi di dalam FUSE akan tercatat di  logs-fuse.log.
+
+![image](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/150204139/27c60b78-5e26-40f7-8d48-7d62df438eaa)
 
 ## NOMOR 3
