@@ -638,8 +638,10 @@ discoveries.zip (https://drive.google.com/file/d/1BJkaBvGaxqiwPWvXRdYNXzxxmIYQ8F
 **Solusi**
 Tentu pertama kita harus mendownload discoveries.zip melalui link https://drive.google.com/file/d/1BJkaBvGaxqiwPWvXRdYNXzxxmIYQ8FKf/view?usp=sharing
 Selanjutnya kita membuat direktori sebagai berikut:
+
 ![Screenshot 2024-05-25 185732](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/922c166e-ed1a-47eb-a876-f619dd20a68e)
 dengan relics berisikan:
+
 ![Screenshot 2024-05-25 185825](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/cc62cca3-2bf0-41dd-ae04-72e64074838b)
 
 Buat file archeology.c dengan kode berikut:
@@ -753,3 +755,423 @@ ls /home/jiki/sis4/mnt
 ````
 Disini saya mengalami kendala yaitu direktori mount tidak muncul
 
+Maka dari itu, disini saya akan merevisi file archeology.c saya
+**Revisi**
+Untuk revisi kode archeology.c menjadi sebagai berikut:
+````
+#define FUSE_USE_VERSION 26
+
+#include <fuse.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+static const char *relics_path = "/home/kali/arsipsisop/sisopmodul4/relics";
+static const int chunk_size = 10240; // 10 KB
+
+static int relics_getattr(const char *path, struct stat *stbuf)
+{
+    int res = 0;
+    memset(stbuf, 0, sizeof(struct stat));
+
+    if (strcmp(path, "/") == 0) {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+    } else {
+        char fullpath[1024];
+        snprintf(fullpath, sizeof(fullpath), "%s%s.000", relics_path, path);
+
+        res = stat(fullpath, stbuf);
+        if (res == -1) return -errno;
+
+        if (S_ISREG(stbuf->st_mode)) {
+            stbuf->st_mode = S_IFREG | 0644;
+            stbuf->st_size = 0;
+            int part = 0;
+            char partpath[1024];
+            while (1) {
+                snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+                struct stat part_stat;
+                if (stat(partpath, &part_stat) == -1) break;
+                stbuf->st_size += part_stat.st_size;
+                part++;
+            }
+        }
+    }
+    return res;
+}
+
+static int relics_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
+{
+    (void) offset;
+    (void) fi;
+
+    if (strcmp(path, "/") != 0) return -ENOENT;
+
+    filler(buf, ".", NULL, 0);
+    filler(buf, "..", NULL, 0);
+
+    DIR *dp;
+    struct dirent *de;
+
+    dp = opendir(relics_path);
+    if (dp == NULL) return -errno;
+
+    while ((de = readdir(dp)) != NULL) {
+        if (strstr(de->d_name, ".000") != NULL) {
+            char name[256];
+            strncpy(name, de->d_name, strlen(de->d_name) - 4);
+            name[strlen(de->d_name) - 4] = '\0';
+            filler(buf, name, NULL, 0);
+        }
+    }
+
+    closedir(dp);
+    return 0;
+}
+
+static int relics_open(const char *path, struct fuse_file_info *fi)
+{
+    return 0;
+}
+
+static int relics_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
+    (void) fi;
+    char partpath[1024];
+    size_t total_read = 0;
+    int part = offset / chunk_size;
+    size_t part_offset = offset % chunk_size;
+
+    while (size > 0) {
+        snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+        FILE *file = fopen(partpath, "r");
+        if (!file) break;
+
+        fseek(file, part_offset, SEEK_SET);
+        size_t read_size = fread(buf, 1, size, file);
+        fclose(file);
+
+        if (read_size <= 0) break;
+
+        buf += read_size;
+        size -= read_size;
+        total_read += read_size;
+        part++;
+        part_offset = 0;
+    }
+
+    return total_read > 0 ? total_read : -errno;
+}
+
+static int relics_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
+    (void) fi;
+    char partpath[1024];
+    size_t total_written = 0;
+    int part = offset / chunk_size;
+    size_t part_offset = offset % chunk_size;
+
+    while (size > 0) {
+        snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+        FILE *file = fopen(partpath, "r+");
+        if (!file) {
+            file = fopen(partpath, "w");
+            if (!file) return -errno;
+        }
+
+        fseek(file, part_offset, SEEK_SET);
+        size_t write_size = fwrite(buf, 1, size, file);
+        fclose(file);
+
+        if (write_size <= 0) break;
+
+        buf += write_size;
+        size -= write_size;
+        total_written += write_size;
+        part++;
+        part_offset = 0;
+    }
+
+    return total_written > 0 ? total_written : -errno;
+}
+
+static int relics_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+    (void) fi;
+    char partpath[1024];
+    snprintf(partpath, sizeof(partpath), "%s%s.000", relics_path, path);
+
+    FILE *file = fopen(partpath, "w");
+    if (!file) return -errno;
+    fclose(file);
+
+    return 0;
+}
+
+static int relics_unlink(const char *path)
+{
+    char partpath[1024];
+    int part = 0;
+    while (1) {
+        snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+        if (remove(partpath) != 0) break;
+        part++;
+    }
+
+    return 0;
+}
+
+static struct fuse_operations relics_oper = {
+    .getattr   = relics_getattr,
+    .readdir   = relics_readdir,
+    .open      = relics_open,
+    .read      = relics_read,
+    .write     = relics_write,
+    .create    = relics_create,
+    .unlink    = relics_unlink,
+};
+
+int main(int argc, char *argv[])
+{
+    return fuse_main(argc, argv, &relics_oper, NULL);
+}
+
+````
+Pada kode diatas terdapat berbagai fungsi, yaitu:
+#### Fungsi relics_getattr
+````
+static int relics_getattr(const char *path, struct stat *stbuf)
+{
+ int res = 0;
+ memset(stbuf, 0, sizeof(struct stat));
+
+ if (strcmp(path, "/") == 0) {
+ stbuf->st_mode = S_IFDIR | 0755;
+ stbuf->st_nlink = 2;
+ } else {
+ char fullpath[1024];
+ snprintf(fullpath, sizeof(fullpath), "%s%s.000", relics_path, path);
+
+ res = stat(fullpath, stbuf);
+ if (res == -1) return -errno;
+
+ if (S_ISREG(stbuf->st_mode)) {
+ stbuf->st_mode = S_IFREG | 0644;
+ stbuf->st_size = 0;
+ int part = 0;
+ char partpath[1024];
+ while (1) {
+ snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+ struct stat part_stat;
+ if (stat(partpath, &part_stat) == -1) break;
+ stbuf->st_size += part_stat.st_size;
+ part++;
+ }
+ }
+ }
+ return res;
+}
+````
+Fungsi ini mendapatkan atribut file atau direktori. Jika path adalah root (/), maka itu adalah direktori. Jika bukan, ia mencari file pecahan pertama (.000) dan menghitung ukuran total file dengan menjumlahkan ukuran semua pecahan.
+#### Fungsi relics_readdir
+````
+static int relics_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
+{
+ (void) offset;
+ (void) fi;
+
+ if (strcmp(path, "/") != 0) return -ENOENT;
+
+ filler(buf, ".", NULL, 0);
+ filler(buf, "..", NULL, 0);
+
+ DIR *dp;
+ struct dirent *de;
+
+ dp = opendir(relics_path);
+ if (dp == NULL) return -errno;
+
+ while ((de = readdir(dp)) != NULL) {
+ if (strstr(de->d_name, ".000") != NULL) {
+ char name[256];
+ strncpy(name, de->d_name, strlen(de->d_name) - 4);
+ name[strlen(de->d_name) - 4] = '\0';
+ filler(buf, name, NULL, 0);
+ }
+ }
+
+ closedir(dp);
+ return 0;
+}
+````
+Fungsi ini membaca isi direktori. Jika path adalah root, ia mengisi buffer dengan daftar file yang ditemukan di direktori relics yang diakhiri dengan .000 (file pecahan pertama).
+#### Fungsi relics_open
+````
+static int relics_open(const char *path, struct fuse_file_info *fi)
+{
+ return 0;
+}
+
+Fungsi ini hanya membuka file. Tidak ada operasi khusus yang dilakukan di sini.
+Fungsi relics_read
+c
+Copy code
+static int relics_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
+ (void) fi;
+ char partpath[1024];
+ size_t total_read = 0;
+ int part = offset / chunk_size;
+ size_t part_offset = offset % chunk_size;
+
+ while (size > 0) {
+ snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+ FILE *file = fopen(partpath, "r");
+ if (!file) break;
+
+ fseek(file, part_offset, SEEK_SET);
+ size_t read_size = fread(buf, 1, size, file);
+ fclose(file);
+
+ if (read_size <= 0) break;
+
+ buf += read_size;
+ size -= read_size;
+ total_read += read_size;
+ part++;
+ part_offset = 0;
+ }
+
+ return total_read > 0 ? total_read : -errno;
+}
+````
+Fungsi ini membaca data dari file pecahan. Ia menghitung bagian file yang perlu dibaca berdasarkan offset dan ukuran chunk, lalu membaca data dari pecahan yang sesuai.
+#### Fungsi relics_write
+````
+static int relics_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
+ (void) fi;
+ char partpath[1024];
+ size_t total_written = 0;
+ int part = offset / chunk_size;
+ size_t part_offset = offset % chunk_size;
+
+ while (size > 0) {
+ snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+ FILE *file = fopen(partpath, "r+");
+ if (!file) {
+ file = fopen(partpath, "w");
+ if (!file) return -errno;
+ }
+
+ fseek(file, part_offset, SEEK_SET);
+ size_t write_size = fwrite(buf, 1, size, file);
+ fclose(file);
+
+ if (write_size <= 0) break;
+
+ buf += write_size;
+ size -= write_size;
+ total_written += write_size;
+ part++;
+ part_offset = 0;
+ }
+
+ return total_written > 0 ? total_written : -errno;
+}
+````
+Fungsi ini menulis data ke file pecahan. Ia menghitung bagian file yang perlu ditulis berdasarkan offset dan ukuran chunk, lalu menulis data ke pecahan yang sesuai.
+#### Fungsi relics_create
+````
+static int relics_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+ (void) fi;
+ char partpath[1024];
+ snprintf(partpath, sizeof(partpath), "%s%s.000", relics_path, path);
+
+ FILE *file = fopen(partpath, "w");
+ if (!file) return -errno;
+ fclose(file);
+
+ return 0;
+}
+````
+Fungsi ini membuat file baru dengan nama pecahan pertama (.000).
+#### Fungsi relics_unlink
+````
+static int relics_unlink(const char *path)
+{
+ char partpath[1024];
+ int part = 0;
+ while (1) {
+ snprintf(partpath, sizeof(partpath), "%s%s.%03d", relics_path, path, part);
+ if (remove(partpath) != 0) break;
+ part++;
+ }
+
+ return 0;
+}
+````
+Fungsi ini menghapus file dengan menghapus semua pecahan file yang ada.
+#### Struktur fuse_operations
+````
+static struct fuse_operations relics_oper = {
+ .getattr = relics_getattr,
+ .readdir = relics_readdir,
+ .open = relics_open,
+ .read = relics_read,
+ .write = relics_write,
+ .create = relics_create,
+ .unlink = relics_unlink,
+};
+````
+Struktur ini menghubungkan fungsi-fungsi yang telah didefinisikan dengan operasi FUSE.
+#### fungsi main
+````
+int main(int argc, char *argv[])
+{
+ return fuse_main(argc, argv, &relics_oper, NULL);
+}
+````
+Fungsi ini memulai filesystem FUSE dengan operasi yang telah ditentukan.
+
+**Pengerjaan**
+tentu dengan menyiapkan FUSE dengan
+```` sudo apt install fuse````
+Kompilasi kode gcc dengan flag yang diperlukan
+```` gcc archeology.c -o relics_fs `pkg-config fuse --cflags --libs` ````
+Jalankan filesystem fuse
+```` ./relics_fs /home/jiki/sisop4/alamak ````
+![Screenshot 2024-05-25 204953](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/56b9024b-3eba-4e5b-8caf-8bdffb180436)
+Verifikasi bahwa file-file direktori seperti pada gambar diatas adalah file utuh
+Salin file dari alamak ke report ```` cp -r /home/jiki/sisop4/alamak/* /home/jiki/sisop4/report/ ````
+
+Konfidgurasi Samba
+````
+[report]
+   path = /home/kali/arsipsisop/sisopmodul4/report
+   available = yes
+   valid users = [your_username]
+   read only = no
+   browsable = yes
+   public = yes
+   writable = yes
+````
+Tambahkan konfigurasi Samba untuk direktori report di file /etc/samba/smb.conf:
+Restart layanan samba
+````
+sudo systemctl restart smbd
+sudo systemctl restart nmbd
+````
+lalu akses folder report dari Windows melalui Samba dengan alamat IP mesin Linux
+
+### Kendala nomor 3
+1. Gagal verifikasi direktori mount.
+2. Belum dapat menjalankan konfigurasi samba.
