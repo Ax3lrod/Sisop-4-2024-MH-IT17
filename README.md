@@ -635,7 +635,8 @@ pada soal 3c, cukup salin secara manual. File Server hanya untuk membuktikan bah
 
 discoveries.zip (https://drive.google.com/file/d/1BJkaBvGaxqiwPWvXRdYNXzxxmIYQ8FKf/view?usp=sharing)
 
-**Solusi**
+### Solusi
+
 Tentu pertama kita harus mendownload discoveries.zip melalui link https://drive.google.com/file/d/1BJkaBvGaxqiwPWvXRdYNXzxxmIYQ8FKf/view?usp=sharing
 Selanjutnya kita membuat direktori sebagai berikut:
 
