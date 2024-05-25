@@ -597,3 +597,159 @@ Semua operasi dan proses yang terjadi di dalam FUSE akan tercatat di  logs-fuse.
 ![image](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/150204139/27c60b78-5e26-40f7-8d48-7d62df438eaa)
 
 ## NOMOR 3
+### Soal
+
+ Seorang arkeolog menemukan sebuah gua yang didalamnya tersimpan banyak relik dari zaman praaksara, sayangnya semua barang yang ada pada gua tersebut memiliki bentuk yang terpecah belah akibat bencana yang tidak diketahui. Sang arkeolog ingin menemukan cara cepat agar ia bisa menggabungkan relik-relik yang terpecah itu, namun karena setiap pecahan relik itu masih memiliki nilai tersendiri, ia memutuskan untuk membuat sebuah file system yang mana saat ia mengakses file system tersebut ia dapat melihat semua relik dalam keadaan utuh, sementara relik yang asli tidak berubah sama sekali.
+Ketentuan :
+Buatlah sebuah direktori dengan ketentuan seperti pada tree berikut
+.
+├── [nama_bebas]
+├── relics
+│   ├── relic_1.png.000
+│   ├── relic_1.png.001
+│   ├── dst dst…
+│   └── relic_9.png.010
+└── report
+
+Direktori [nama_bebas] adalah direktori FUSE dengan direktori asalnya adalah direktori relics. Ketentuan Direktori [nama_bebas] adalah sebagai berikut :
+Ketika dilakukan listing, isi dari direktori [nama_bebas] adalah semua relic dari relics yang telah tergabung.
+![Screenshot 2024-05-25 185113](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/1f0d5c5b-a88e-4edf-8cde-f81f17d2139c)
+
+Ketika dilakukan copy (dari direktori [nama_bebas] ke tujuan manapun), file yang disalin adalah file dari direktori relics yang sudah tergabung.
+![Screenshot 2024-05-25 185150](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/cc202166-fcef-4c50-b44e-5a3d67320d0e)
+
+Ketika ada file dibuat, maka pada direktori asal (direktori relics) file tersebut akan dipecah menjadi sejumlah pecahan dengan ukuran maksimum tiap pecahan adalah 10kb.
+![Screenshot 2024-05-25 185224](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/1a1d5060-a6f8-4584-a47e-01f5f552ac6e)
+
+File yang dipecah akan memiliki nama [namafile].000 dan seterusnya sesuai dengan jumlah pecahannya.
+Ketika dilakukan penghapusan, maka semua pecahannya juga ikut terhapus.
+
+Direktori report adalah direktori yang akan dibagikan menggunakan Samba File Server. Setelah kalian berhasil membuat direktori [nama_bebas], jalankan FUSE dan salin semua isi direktori [nama_bebas] pada direktori report.
+![Screenshot 2024-05-25 185438](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/7ebede9e-933a-4f78-b56a-c15935c1029f)
+
+
+Catatan:
+pada contoh terdapat 20 relic, namun pada zip file hanya akan ada 10 relic
+[nama_bebas] berarti namanya dibebaskan
+pada soal 3c, cukup salin secara manual. File Server hanya untuk membuktikan bahwa semua file pada direktori [nama_bebas] dapat dibuka dengan baik.
+
+discoveries.zip (https://drive.google.com/file/d/1BJkaBvGaxqiwPWvXRdYNXzxxmIYQ8FKf/view?usp=sharing)
+
+**Solusi**
+Tentu pertama kita harus mendownload discoveries.zip melalui link https://drive.google.com/file/d/1BJkaBvGaxqiwPWvXRdYNXzxxmIYQ8FKf/view?usp=sharing
+Selanjutnya kita membuat direktori sebagai berikut:
+![Screenshot 2024-05-25 185732](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/922c166e-ed1a-47eb-a876-f619dd20a68e)
+dengan relics berisikan:
+![Screenshot 2024-05-25 185825](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/cc62cca3-2bf0-41dd-ae04-72e64074838b)
+
+Buat file archeology.c dengan kode berikut:
+````
+#define FUSE_USE_VERSION 30
+#include <fuse.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <dirent.h>
+
+static const char base_path = "/path/to/relics";
+
+static int archeology_getattr(const charpath, struct stat stbuf) {
+    int res;
+    char fpath[1000];
+    sprintf(fpath, "%s%s", base_path, path);
+    printf("getattr called for path: %s\n", fpath);
+
+    res = lstat(fpath, stbuf);
+    if (res == -1)
+        return -errno;
+
+    return 0;
+}
+
+static int archeology_readdir(const charpath, void buf, fuse_fill_dir_t filler,
+                              off_t offset, struct fuse_file_infofi) {
+    DIR dp;
+    struct direntde;
+    char fpath[1000];
+    sprintf(fpath, "%s%s", base_path, path);
+    printf("readdir called for path: %s\n", fpath);
+
+    dp = opendir(fpath);
+    if (dp == NULL)
+        return -errno;
+
+    while ((de = readdir(dp)) != NULL) {
+        struct stat st;
+        memset(&st, 0, sizeof(st));
+        st.st_ino = de->d_ino;
+        st.st_mode = de->d_type << 12;
+        if (filler(buf, de->d_name, &st, 0))
+            break;
+    }
+
+    closedir(dp);
+    return 0;
+}
+
+static int archeology_open(const char path, struct fuse_file_infofi) {
+    int res;
+    char fpath[1000];
+    sprintf(fpath, "%s%s", base_path, path);
+    printf("open called for path: %s\n", fpath);
+
+    res = open(fpath, fi->flags);
+    if (res == -1)
+        return -errno;
+
+    close(res);
+    return 0;
+}
+
+static int archeology_read(const char path, charbuf, size_t size, off_t offset,
+                           struct fuse_file_info fi) {
+    int fd;
+    int res;
+    char fpath[1000];
+    sprintf(fpath, "%s%s", base_path, path);
+    printf("read called for path: %s\n", fpath);
+
+    fd = open(fpath, O_RDONLY);
+    if (fd == -1)
+        return -errno;
+
+    res = pread(fd, buf, size, offset);
+    if (res == -1)
+        res = -errno;
+
+    close(fd);
+    return res;
+}
+
+static struct fuse_operations archeology_oper = {
+    .getattr    = archeology_getattr,
+    .readdir    = archeology_readdir,
+    .open       = archeology_open,
+    .read       = archeology_read,
+};
+
+int main(int argc, charargv[]) {
+    return fuse_main(argc, argv, &archeology_oper, NULL);
+}
+````
+
+Lalu gunakan FUSE untuk membuat folder mnt dengan
+````
+mkdir -p /home/jiki/sisop4/mnt
+````
+lalu jalankan prgram FUSE
+````
+./archeology /home/jiki/sis4/mnt
+````
+Verifikasi direktori mount
+````
+ls /home/jiki/sis4/mnt
+````
+Disini saya mengalami kendala yaitu direktori mount tidak muncul
+
