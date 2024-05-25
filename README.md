@@ -1150,6 +1150,7 @@ Kompilasi kode gcc dengan flag yang diperlukan
 Jalankan filesystem fuse
 ```` ./relics_fs /home/jiki/sisop4/alamak ````
 ![Screenshot 2024-05-25 204953](https://github.com/Ax3lrod/Sisop-4-2024-MH-IT17/assets/151889425/56b9024b-3eba-4e5b-8caf-8bdffb180436)
+
 Verifikasi bahwa file-file direktori seperti pada gambar diatas adalah file utuh
 Salin file dari alamak ke report ```` cp -r /home/jiki/sisop4/alamak/* /home/jiki/sisop4/report/ ````
 
